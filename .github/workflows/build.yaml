@@ -1,0 +1,39 @@
+name: Build Executables
+
+# main 브랜치에 코드가 push 될 때마다 이 작업이 자동으로 실행됨
+on:
+    label:
+        types: [created]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+    - name: 1. 저장소 코드 가져오기
+      uses: actions/checkout@v6
+
+    - name: 2. 파이썬 환경 설정
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.11'
+
+    - name: 3. 라이브러리 설치
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: 4. PyInstaller로 실행 파일 만들기 (Windows 용)
+      if: runner.os == 'Windows'
+      # 윈도우는 폴더 구분자를 세미콜론(;)으로 사용
+      run: pyinstaller --noconsole --onefile --add-data "templates;templates" webapp.py
+
+    - name: 5. 완성된 실행 파일(Artifact) 업로드
+      uses: actions/upload-artifact@v6
+      with:
+        name: app-release-${{ matrix.os }}
+        path: dist/

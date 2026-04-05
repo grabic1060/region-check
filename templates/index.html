@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SNS Region Checker</title>
+    <style>
+        /* 기본 배경 및 폰트 설정 */
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Pretendard', -apple-system, sans-serif;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+        }
+
+        /* 메인 카드 (글래스모피즘 & 반응형) */
+        .card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px 30px;
+            width: 90%;
+            max-width: 450px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            text-align: center;
+            /* 마우스 오버 시 부드러운 전환 효과 */
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        h2 {
+            color: #333;
+            font-size: 1.4rem;
+            margin-bottom: 30px;
+            word-break: keep-all;
+        }
+
+        /* 예쁜 입력 필드 */
+        input[type="text"] {
+            width: 100%;
+            padding: 15px;
+            box-sizing: border-box;
+            border: 2px solid #e1e1e1;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            text-align: center;
+            outline: none;
+            transition: border-color 0.3s ease;
+            margin-bottom: 20px;
+        }
+
+        input[type="text"]:focus {
+            border-color: #0095f6; /* 인스타그램 시그니처 블루 */
+        }
+
+        /* 화려한 버튼 디자인 */
+        button {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(45deg, #0095f6, #0077c9);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.3s ease, transform 0.1s ease;
+        }
+
+        button:hover {
+            background: linear-gradient(45deg, #0077c9, #005a9e);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+
+        /* 거대한 국기 표시 영역 */
+        #flag-display {
+            font-size: 6rem;
+            margin: 20px 0;
+            display: block;
+            /* 국기가 통통 튀는 애니메이션 준비 */
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        /* 결과 텍스트 */
+        #status-text {
+            font-size: 1.1rem;
+            color: #666;
+            margin-top: 10px;
+            font-weight: 500;
+        }
+
+        /* 로딩 스피너 (CSS 애니메이션) */
+        .spinner {
+            display: inline-block;
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(0, 149, 246, 0.2);
+            border-radius: 50%;
+            border-top-color: #0095f6;
+            animation: spin 1s ease-in-out infinite;
+            margin: 20px 0;
+            display: none; /* 평소엔 숨김 */
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>SNS 계정 국가 확인</h2>
+        <input type="text" id="account-input" placeholder="사용자명을 입력하세요" autocomplete="off">
+        <button id="check-btn" onclick="startCheck()">국가 확인하기</button>
+        
+        <div id="loading-spinner" class="spinner"></div>
+        
+        <div id="flag-display">🌍</div>
+        <div id="status-text">주의: 단시간 내 과도한 실행 시 차단될 수 있습니다.</div>
+    </div>
+
+    <script>
+        // 엔터키 지원
+        document.getElementById("account-input").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") {
+                event.preventDefault();
+                startCheck();
+            }
+        });
+
+        async function startCheck() {
+            const accountInput = document.getElementById("account-input");
+            const btn = document.getElementById("check-btn");
+            const flagDisplay = document.getElementById("flag-display");
+            const statusText = document.getElementById("status-text");
+            const spinner = document.getElementById("loading-spinner");
+            
+            const account = accountInput.value.trim();
+            if (!account) {
+                statusText.style.color = "#d9534f";
+                statusText.innerText = "사용자명을 입력해주세요.";
+                return;
+            }
+
+            // UI를 로딩 상태로 변경
+            btn.disabled = true;
+            btn.innerText = "확인 중...";
+            flagDisplay.style.display = "none";
+            spinner.style.display = "inline-block";
+            statusText.style.color = "#0095f6";
+            statusText.innerText = `⏳ '${account}' 계정 정보 분석 중...`;
+
+            try {
+                // 파이썬 서버(/check)로 데이터 전송
+                const response = await fetch('/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ account: account })
+                });
+                
+                const result = await response.json();
+
+                // 로딩 스피너 숨기고 국기 표시
+                spinner.style.display = "none";
+                flagDisplay.style.display = "block";
+                
+                // 결과에 따라 UI 업데이트
+                flagDisplay.innerText = result.flag;
+                statusText.innerText = result.message;
+
+                if (result.status === "success") {
+                    statusText.style.color = "#28a745";
+                    // 성공 시 국기가 튀어오르는 효과
+                    flagDisplay.style.transform = "scale(1.2)";
+                    setTimeout(() => flagDisplay.style.transform = "scale(1)", 300);
+                } else if (result.status === "warning") {
+                    statusText.style.color = "#f0ad4e";
+                } else {
+                    statusText.style.color = "#d9534f";
+                }
+
+            } catch (error) {
+                spinner.style.display = "none";
+                flagDisplay.style.display = "block";
+                flagDisplay.innerText = "❌";
+                statusText.style.color = "#d9534f";
+                statusText.innerText = "서버 통신 중 오류가 발생했습니다.";
+            } finally {
+                // 버튼 상태 복구
+                btn.disabled = false;
+                btn.innerText = "국가 확인하기";
+            }
+        }
+    </script>
+</body>
+</html>
