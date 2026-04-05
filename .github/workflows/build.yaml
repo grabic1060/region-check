@@ -2,9 +2,12 @@ name: Build Executables
 
 # main 브랜치에 코드가 push 될 때마다 이 작업이 자동으로 실행됨
 on:
-    label:
-        types: [created]
-
+  workflow_dispatch:
+    inputs:
+      logLevel:
+        description: 'Log level'
+        required: true
+        default: 'warning'
 jobs:
   build:
     strategy:
