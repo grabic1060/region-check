@@ -67,6 +67,13 @@ HTML_TEMPLATE = """
             box-shadow: 0 10px 30px rgba(0,0,0,0.05);
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
+        h2 { color: #333; font-size: 1.4rem; margin-bottom: 30px; word-break: keep-all; }
+        input[type="text"] {
+            width: 100%; padding: 15px; box-sizing: border-box;
+            border: 2px solid #e1e1e1; border-radius: 12px;
+            font-size: 1.1rem; text-align: center; outline: none;
+            transition: border-color 0.3s ease; margin-bottom: 20px;
+        }
         input[type="text"]:focus { border-color: #0095f6; }
         button {
             width: 100%; padding: 15px; color: white; border: none;
@@ -89,6 +96,7 @@ HTML_TEMPLATE = """
 
         #flag-display { font-size: 6rem; margin: 20px 0; display: block; transition: transform 0.3s ease; }
         #status-text { font-size: 1.1rem; color: #666; margin-top: 10px; font-weight: 500; }
+        #caution-text { font-size: 1.0rem; color: #555; margin-top: 10px; font-weight: 500; }
         
         .spinner {
             display: inline-block; width: 50px; height: 50px;
@@ -101,7 +109,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="card">
-        <h2>Instagram 국가 확인/h2>
+        <h2>Instagram 계정 국가 확인</h2>
         <input type="text" id="account-input" placeholder="사용자명을 입력하세요" autocomplete="off">
         <button id="check-btn" onclick="startCheck()">국가 확인하기</button>
         <button id="install-btn" onclick="installEngine()">🚀 전용 엔진 설치하기</button>
@@ -109,6 +117,7 @@ HTML_TEMPLATE = """
         <div id="loading-spinner" class="spinner"></div>
         <div id="flag-display">🌍</div>
         <div id="status-text">주의: 단시간 반복 시 차단될 수 있습니다.</div>
+        <div id="caution-text">이 프로그램은 계정에 등록된 전화번호를 기준으로 분석하며, 계정 사용자의 국적을 보장하지 않습니다.</div>
     </div>
 
     <script>
