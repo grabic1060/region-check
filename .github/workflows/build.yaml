@@ -33,7 +33,7 @@ jobs:
     - name: 4. PyInstaller로 실행 파일 만들기 (Windows 용)
       if: runner.os == 'Windows'
       # 윈도우는 폴더 구분자를 세미콜론(;)으로 사용
-      run: pyinstaller --noconsole --onefile --add-data "templates;templates" webapp.py
+      run: pyinstaller --noconsole --onefile final.py
 
     - name: 5. 완성된 실행 파일(Artifact) 업로드
       uses: actions/upload-artifact@v6
