@@ -67,14 +67,6 @@ HTML_TEMPLATE = """
             box-shadow: 0 10px 30px rgba(0,0,0,0.05);
             transition: transform 0.3s ease, box-shadow 0.3s ease;
         }
-        .card:hover { transform: translateY(-5px); box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
-        h2 { color: #333; font-size: 1.4rem; margin-bottom: 30px; word-break: keep-all; }
-        input[type="text"] {
-            width: 100%; padding: 15px; box-sizing: border-box;
-            border: 2px solid #e1e1e1; border-radius: 12px;
-            font-size: 1.1rem; text-align: center; outline: none;
-            transition: border-color 0.3s ease; margin-bottom: 20px;
-        }
         input[type="text"]:focus { border-color: #0095f6; }
         button {
             width: 100%; padding: 15px; color: white; border: none;
@@ -109,7 +101,7 @@ HTML_TEMPLATE = """
 </head>
 <body>
     <div class="card">
-        <h2>Instagram Region Checker</h2>
+        <h2>Instagram 국가 확인/h2>
         <input type="text" id="account-input" placeholder="사용자명을 입력하세요" autocomplete="off">
         <button id="check-btn" onclick="startCheck()">국가 확인하기</button>
         <button id="install-btn" onclick="installEngine()">🚀 전용 엔진 설치하기</button>
