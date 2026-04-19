@@ -1,13 +1,11 @@
 name: Build Executables
 
-# main 브랜치에 코드가 push 될 때마다 이 작업이 자동으로 실행됨
 on:
   workflow_dispatch:
-    inputs:
-      logLevel:
-        description: 'Log level'
-        required: true
-        default: 'warning'
+  push:
+    tags:
+      - 'v*'
+
 jobs:
   build:
     strategy:
@@ -18,25 +16,30 @@ jobs:
 
     steps:
     - name: 1. 저장소 코드 가져오기
-      uses: actions/checkout@v6
+      uses: actions/checkout@v4
 
     - name: 2. 파이썬 환경 설정
-      uses: actions/setup-python@v6
+      uses: actions/setup-python@v5
       with:
-        python-version: '3.11'
+        python-version: '3.12'
 
     - name: 3. 라이브러리 설치
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
+        pip install pyinstaller
 
     - name: 4. PyInstaller로 실행 파일 만들기 (Windows 용)
-      if: runner.os == 'Windows'
-      # 윈도우는 폴더 구분자를 세미콜론(;)으로 사용
-      run: pyinstaller --noconsole --onefile final.py
+      run: pyinstaller --noconsole --onefile --name region-check-windows-v1.1.0 region-check-gui.py
 
-    - name: 5. 완성된 실행 파일(Artifact) 업로드
-      uses: actions/upload-artifact@v6
+    - name: 5. GitHub Release 생성 및 파일 업로드
+      uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/')
       with:
-        name: app-release-${{ matrix.os }}
-        path: dist/
+        files: dist/region-check-windows-v1.1.0.exe
+        tag_name: v1.1.0
+        name: Release v1.1.0
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
