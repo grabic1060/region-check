@@ -1,11 +1,16 @@
-import tkinter as tk
-from tkinter import ttk
+import os
+import sys
 import threading
+import webview
+import platform
+import subprocess
+from flask import Flask, request, jsonify, render_template_string
 from playwright.sync_api import sync_playwright
+
+app = Flask(__name__)
 
 # 전 세계 국가 코드 딕셔너리
 country_codes = {
-    # 🌏 아시아 / 태평양
     "+82": ("한국", "🇰🇷"), "+81": ("일본", "🇯🇵"), "+86": ("중국", "🇨🇳"),
     "+886": ("대만", "🇹🇼"), "+852": ("홍콩", "🇭🇰"), "+853": ("마카오", "🇲🇴"),
     "+84": ("베트남", "🇻🇳"), "+65": ("싱가포르", "🇸🇬"), "+66": ("태국", "🇹🇭"),
@@ -15,7 +20,6 @@ country_codes = {
     "+977": ("네팔", "🇳🇵"), "+998": ("우즈베키스탄", "🇺🇿"), "+61": ("호주", "🇦🇺"),
     "+64": ("뉴질랜드", "🇳🇿"), "+679": ("피지", "🇫🇯"),
 
-    # 🌎 북미 / 중남미
     "+1": ("미국/캐나다", "🇺🇸/🇨🇦"), "+1876": ("자메이카", "🇯🇲"), "+1787": ("푸에르토리코", "🇵🇷"),
     "+52": ("멕시코", "🇲🇽"), "+55": ("브라질", "🇧🇷"), "+54": ("아르헨티나", "🇦🇷"),
     "+56": ("칠레", "🇨🇱"), "+57": ("콜롬비아", "🇨🇴"), "+51": ("페루", "🇵🇪"),
@@ -23,7 +27,6 @@ country_codes = {
     "+593": ("에콰도르", "🇪🇨"), "+591": ("볼리비아", "🇧🇴"), "+502": ("과테말라", "🇬🇹"),
     "+506": ("코스타리카", "🇨🇷"), "+507": ("파나마", "🇵🇦"), "+53": ("쿠바", "🇨🇺"),
 
-    # 🌍 유럽
     "+44": ("영국", "🇬🇧"), "+33": ("프랑스", "🇫🇷"), "+49": ("독일", "🇩🇪"),
     "+39": ("이탈리아", "🇮🇹"), "+34": ("스페인", "🇪🇸"), "+7": ("러시아/카자흐스탄", "🇷🇺/🇰🇿"),
     "+31": ("네덜란드", "🇳🇱"), "+32": ("벨기에", "🇧🇪"), "+41": ("스위스", "🇨🇭"),
@@ -33,7 +36,6 @@ country_codes = {
     "+351": ("포르투갈", "🇵🇹"), "+353": ("아일랜드", "🇮🇪"), "+380": ("우크라이나", "🇺🇦"),
     "+40": ("루마니아", "🇷🇴"), "+359": ("불가리아", "🇧🇬"),
 
-    # 🐪 중동 / 아프리카
     "+971": ("아랍에미리트", "🇦🇪"), "+966": ("사우디아라비아", "🇸🇦"), "+90": ("튀르키예", "🇹🇷"),
     "+98": ("이란", "🇮🇷"), "+972": ("이스라엘", "🇮🇱"), "+962": ("요르단", "🇯🇴"),
     "+974": ("카타르", "🇶🇦"), "+965": ("쿠웨이트", "🇰🇼"), "+968": ("오만", "🇴🇲"),
@@ -43,127 +45,386 @@ country_codes = {
     "+233": ("가나", "🇬🇭"), "+251": ("에티오피아", "🇪🇹"), "+256": ("우간다", "🇺🇬")
 }
 
-class RegionCheckerApp:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Instagram Region Checker")
-        # 창 크기 약 2.5배 확대
-        self.root.geometry("800x550")
-        self.root.resizable(False, False)
+HTML_TEMPLATE = """
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Instagram Region Checker</title>
+    <style>
+        body {
+            margin: 0; padding: 0; min-height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+            font-family: 'Pretendard', -apple-system, sans-serif;
+            background: linear-gradient(135deg, #fdfbfb 0%, #ebedee 100%);
+            overflow: hidden;
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.85); backdrop-filter: blur(10px);
+            border-radius: 20px; padding: 40px 30px;
+            width: 90%; max-width: 450px; text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        h2 { color: #333; font-size: 1.4rem; margin-bottom: 30px; word-break: keep-all; }
+        input[type="text"] {
+            width: 100%; padding: 15px; box-sizing: border-box;
+            border: 2px solid #e1e1e1; border-radius: 12px;
+            font-size: 1.1rem; text-align: center; outline: none;
+            transition: border-color 0.3s ease; margin-bottom: 20px;
+        }
+        input[type="text"]:focus { border-color: #0095f6; }
+        button {
+            width: 100%; padding: 15px; color: white; border: none;
+            border-radius: 12px; font-size: 1.1rem; font-weight: bold;
+            cursor: pointer; transition: background 0.3s ease, transform 0.1s ease;
+        }
+        button:active { transform: scale(0.98); }
+        button:disabled { background: #cccccc !important; cursor: not-allowed; }
         
-        style = ttk.Style()
-        if "clam" in style.theme_names():
-            style.theme_use("clam")
+        #check-btn { background: linear-gradient(45deg, #0095f6, #0077c9); }
+        #check-btn:hover { background: linear-gradient(45deg, #0077c9, #005a9e); }
+        
+        #install-btn {
+            background: linear-gradient(45deg, #ff9800, #f57c00);
+            display: none; margin-top: 10px;
+        }
+        #install-btn:hover { background: linear-gradient(45deg, #f57c00, #e65100); }
 
-        self.setup_ui()
+        #flag-display { font-size: 6rem; margin: 20px 0; display: block; transition: transform 0.3s ease; }
+        #status-text { font-size: 1.1rem; color: #666; margin-top: 10px; font-weight: 500; }
+        #caution-text { font-size: 1.0rem; color: #555; margin-top: 10px; font-weight: 500; }
+        
+        .spinner {
+            display: inline-block; width: 50px; height: 50px;
+            border: 5px solid rgba(0, 149, 246, 0.2); border-radius: 50%;
+            border-top-color: #0095f6; animation: spin 1s ease-in-out infinite;
+            margin: 20px 0; display: none;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h2>Instagram 계정 국가 확인</h2>
+        <input type="text" id="account-input" placeholder="사용자명을 입력하세요" autocomplete="off">
+        <button id="check-btn" onclick="startCheck()">국가 확인하기</button>
+        <button id="install-btn" onclick="installEngine()">🚀 전용 엔진 설치하기</button>
+        
+        <div id="loading-spinner" class="spinner"></div>
+        <div id="flag-display">🌍</div>
+        <div id="status-text">주의: 단시간 반복 시 차단될 수 있습니다.</div>
+        <div id="caution-text">이 프로그램은 계정에 등록된 전화번호를 기준으로 분석하며, 계정 사용자의 국적을 보장하지 않습니다.</div>
+    </div>
 
-    def setup_ui(self):
-        # 모든 요소를 창의 정중앙에 배치하기 위한 메인 프레임 설정
-        main_frame = ttk.Frame(self.root)
-        main_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+    <script>
+        document.getElementById("account-input").addEventListener("keypress", function(event) {
+            if (event.key === "Enter") { event.preventDefault(); startCheck(); }
+        });
 
-        # 1. 메인 타이틀 (중앙 정렬)
-        ttk.Label(main_frame, text="확인하려는 Instagram 계정의 사용자명을 입력하세요", 
-                  font=("Helvetica", 16, "bold"), justify="center").pack(pady=(0, 25))
+        async function startCheck(visible = false) {
+            const account = document.getElementById("account-input").value.trim();
+            if (!account) return updateUI("error", "⚠️ 사용자명을 입력해주세요.", "❓");
 
-        # 2. 입력창 (텍스트 중앙 정렬 justify="center", 글씨 크기 확대)
-        self.account_entry = ttk.Entry(main_frame, font=("Helvetica", 18), width=25, justify="center")
-        self.account_entry.pack(pady=(0, 20), ipady=8)
-        self.account_entry.bind("<Return>", lambda event: self.start_check())
+            if (!visible) {
+                setLoading(true, `⏳ '${account}' 계정 정보 분석 중...`);
+            } else {
+                setLoading(true, `🤖 새로 뜬 창에서 캡차를 풀어주세요! (해결 시 자동 진행)`);
+            }
+            document.getElementById("install-btn").style.display = "none"; 
 
-        # 3. 실행 버튼 (가로 길이 맞춰서 확장)
-        self.check_btn = ttk.Button(main_frame, text="국가 확인하기", command=self.start_check)
-        self.check_btn.pack(fill=tk.X, ipady=10)
+            try {
+                const response = await fetch('/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ account: account, visible: visible }) 
+                });
+                const result = await response.json();
+                
+                if (result.status === "captcha_detected" && !visible) {
+                    return startCheck(true);
+                }
 
-        # 4. 국기 표시 라벨 (초대형 폰트 사이즈)
-        self.flag_var = tk.StringVar()
-        self.flag_var.set("🌍") # 기본 대기 아이콘
-        self.flag_label = ttk.Label(main_frame, textvariable=self.flag_var, font=("Helvetica", 90), justify="center")
-        self.flag_label.pack(pady=(30, 15))
+                setLoading(false);
+                updateUI(result.status, result.message, result.flag);
 
-        # 5. 결과 및 상태 출력 라벨 (글씨 크기 확대 및 중앙 정렬)
-        self.status_var = tk.StringVar()
-        self.status_var.set("주의: 같은 IP로 단시간에 여러 번 시도 시 차단될 수 있습니다.")
-        self.status_label = ttk.Label(main_frame, textvariable=self.status_var, 
-                                      font=("Helvetica", 14), foreground="#777777", justify="center")
-        self.status_label.pack()
+                if (result.status === "needs_install") {
+                    document.getElementById("install-btn").style.display = "block";
+                    document.getElementById("check-btn").style.display = "none";
+                }
 
-    def update_status(self, message, color="#333333", icon=None):
-        # 상태 메시지, 색상, 그리고 국기(또는 상태 아이콘)를 한 번에 업데이트
-        self.root.after(0, lambda: self.status_var.set(message))
-        self.root.after(0, lambda: self.status_label.config(foreground=color))
-        if icon:
-            self.root.after(0, lambda: self.flag_var.set(icon))
+            } catch (error) {
+                setLoading(false);
+                updateUI("error", "서버 통신 중 오류가 발생했습니다.", "🚨");
+            }
+        }
 
-    def reset_button(self):
-        self.root.after(0, lambda: self.check_btn.config(state=tk.NORMAL, text="국가 확인하기"))
+        async function installEngine() {
+            document.getElementById("install-btn").disabled = true;
+            document.getElementById("install-btn").innerText = "설치 중입니다... (1~2분 소요)";
+            setLoading(true, "⚙️ 필수 브라우저 엔진을 다운로드하고 있습니다...");
 
-    def start_check(self):
-        account = self.account_entry.get().strip()
-        if not account:
-            self.update_status("⚠️ 사용자명을 다시 확인해주세요.", "#d9534f", "❓")
-            return
+            try {
+                const response = await fetch('/install', { method: 'POST' });
+                const result = await response.json();
+                
+                setLoading(false);
+                if (result.status === "success") {
+                    updateUI("success", "✅ 설치가 완료되었습니다! 다시 확인해주세요.", "🎉");
+                    document.getElementById("install-btn").style.display = "none";
+                    document.getElementById("check-btn").style.display = "block";
+                } else {
+                    updateUI("error", "설치 실패: " + result.message, "❌");
+                }
+            } catch (error) {
+                setLoading(false);
+                updateUI("error", "설치 중 통신 오류가 발생했습니다.", "🚨");
+            } finally {
+                document.getElementById("install-btn").disabled = false;
+                document.getElementById("install-btn").innerText = "🚀 전용 엔진 설치하기";
+            }
+        }
 
-        self.check_btn.config(state=tk.DISABLED, text="확인 중...")
-        self.update_status(f"⏳ '{account}' 계정 정보 확인 중...", "#0275d8", "🔍")
+        function setLoading(isLoading, message = "") {
+            const btn = document.getElementById("check-btn");
+            const spinner = document.getElementById("loading-spinner");
+            const flagDisplay = document.getElementById("flag-display");
+            const statusText = document.getElementById("status-text");
 
-        sorted_codes = sorted(country_codes.items(), key=lambda item: len(item[0]), reverse=True)
-        thread = threading.Thread(target=self.run_automation, args=(account, sorted_codes), daemon=True)
-        thread.start()
+            btn.disabled = isLoading;
+            btn.innerText = isLoading ? "작업 중..." : "국가 확인하기";
+            spinner.style.display = isLoading ? "inline-block" : "none";
+            flagDisplay.style.display = isLoading ? "none" : "block";
+            
+            if (message) {
+                statusText.style.color = "#0095f6";
+                statusText.innerText = message;
+            }
+        }
 
-    def run_automation(self, account, codes):
-        try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                page = browser.new_page()
+        function updateUI(status, message, flag) {
+            const statusText = document.getElementById("status-text");
+            const flagDisplay = document.getElementById("flag-display");
+            
+            flagDisplay.innerText = flag;
+            statusText.innerText = message;
 
-                number_founded = False
-                country_founded = False
+            if (status === "success") statusText.style.color = "#28a745";
+            else if (status === "warning") statusText.style.color = "#f0ad4e";
+            else if (status === "error" || status === "needs_install" || status === "captcha_detected" || status === "fake_account") statusText.style.color = "#d9534f";
 
+            if (status === "success") {
+                flagDisplay.style.transform = "scale(1.2)";
+                setTimeout(() => flagDisplay.style.transform = "scale(1)", 300);
+            }
+        }
+    </script>
+</body>
+</html>
+"""
+
+@app.route('/')
+def home():
+    return render_template_string(HTML_TEMPLATE)
+
+@app.route('/install', methods=['POST'])
+def install_engine():
+    try:
+        subprocess.check_call([sys.executable, "-m", "playwright", "install", "chromium"])
+        return jsonify({"status": "success"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+@app.route('/check', methods=['POST'])
+def check_region():
+    data = request.get_json()
+    account = data.get('account')
+    visible_mode = data.get('visible', False)
+    
+    is_headless = not visible_mode
+    
+    if not account:
+        return jsonify({"status": "error", "message": "사용자명을 입력해주세요.", "flag": "❓"})
+
+    sorted_codes = sorted(country_codes.items(), key=lambda item: len(item[0]), reverse=True)
+    result = {"status": "error", "message": "알 수 없는 오류", "flag": "❌"}
+
+    try:
+        with sync_playwright() as p:
+            current_os = platform.system()
+            browser = None
+
+            launch_options = {
+                "headless": is_headless,
+                "args": ["--disable-blink-features=AutomationControlled"]
+            }
+
+            try:
+                if current_os == "Windows":
+                    browser = p.chromium.launch(channel="msedge", **launch_options)
+                elif current_os == "Darwin":
+                    browser = p.chromium.launch(channel="chrome", **launch_options)
+                else:
+                    browser = p.firefox.launch(channel="firefox", **launch_options)
+            except Exception:
+                pass 
+
+            if not browser:
                 try:
-                    page.goto("https://www.instagram.com/accounts/password/reset/")
-                    page.fill("#_r_4_", account)
-                    page.press("#_r_4_", "Enter")
+                    browser = p.chromium.launch(**launch_options)
+                except Exception:
+                    return jsonify({
+                        "status": "needs_install", 
+                        "message": "사용 가능한 브라우저가 없습니다. 아래 버튼을 눌러 전용 엔진을 설치하세요.", 
+                        "flag": "⚙️"
+                    })
 
-                    page.wait_for_load_state("networkidle")
+            # 사람처럼 보이기 위한 브라우저 컨텍스트(환경) 세팅
+            context = browser.new_context(
+                # User-Agent 위장 (Headless 글자 제거)
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                locale="ko-KR", # 무조건 한국어 페이지가 뜨도록 강제
+                viewport={"width": 1280, "height": 720} # 모바일로 인식되지 않게 해상도 고정
+            )
 
-                    elements = page.locator("body *").all()
-                    
-                    for element in elements:
-                        text_data = element.text_content()
+            # 위장된 context에서 페이지를 생성
+            page = context.new_page()
+            page.goto("https://www.instagram.com/accounts/password/reset/")
+            
+            # 사용자명 입력 필드 대기 및 입력
+            try:
+                page.wait_for_selector("#_r_4_", timeout=10000)
+                page.fill("#_r_4_", account)
+                page.press("#_r_4_", "Enter")
+            except Exception:
+                # 선택자가 변경되었을 경우를 대비한 보조 로직
+                page.keyboard.type(account)
+                page.keyboard.press("Enter")
 
-                        if not text_data or not text_data.strip():
-                            continue
-                        
-                        text_data = text_data.strip()
-
-                        if "Get link via SMS" in text_data:
-                            number_founded = True
-
-                            for code, (country, flag) in codes:
-                                if code in text_data:
-                                    country_founded = True
-                                    self.update_status(f"성공: {country} 번호로 가입되어 있습니다.", "#5cb85c", flag)
-                                    break
-                            break
+            # 캡차 또는 결과 페이지 대기
+            if visible_mode:
+                try:
+                    # 결과 페이지의 특징적인 텍스트가 나타날 때까지 대기
+                    page.wait_for_function(
+                        """() => {
+                            const text = document.body.innerText;
+                            const lowerText = text.toLowerCase();
                             
-                except Exception as e:
-                    self.update_status(f"과정 중 오류 발생: {e}", "#d9534f", "❌")
+                            // 1. 성공 지표 (전송 옵션 또는 완료 메시지)
+                            const isSuccess = lowerText.includes('sms') || lowerText.includes('email') || 
+                                             text.includes('SMS') || text.includes('이메일') || text.includes('전송');
+                            
+                            // 2. 실제 데이터 패턴 (+82 또는 @ 가 포함되어야 함)
+                            const hasData = text.includes('+') || text.includes('@');
+                            
+                            // 3. 오류 지표
+                            const isError = lowerText.includes('no account found') || text.includes('찾을 수 없음');
 
-                finally:
-                    if not number_founded: 
-                        self.update_status("전화번호를 찾지 못했습니다.", "#d9534f", "📱")
-                    elif not country_founded: 
-                        self.update_status("국가코드를 찾지 못했거나 알 수 없는 국가입니다.", "#f0ad4e", "🗺️")
-                    browser.close()
+                            return (isSuccess && hasData) || isError;
+                        }""",
+                        timeout=1800000 # 3분
+                    )
+                    # 데이터가 렌더링될 약간의 추가 시간
+                    page.wait_for_timeout(1500)
+                except Exception:
+                    pass
+            else:
+                # 헤드리스 모드에서 네트워크 유휴 상태 대기
+                try:
+                    page.wait_for_load_state("networkidle", timeout=15000)
+                except Exception:
+                    pass
 
-        except Exception as e:
-            self.update_status(f"브라우저 실행 오류: {e}", "#d9534f", "🚨")
-        
-        finally:
-            self.reset_button()
+            # 화면 데이터 추출 (더 강력한 TreeWalker 방식 사용)
+            extracted_texts = page.evaluate("""() => {
+                const results = [];
+                const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, null, false);
+                let node;
+                while(node = walk.nextNode()) {
+                    const text = node.textContent.trim();
+                    if (text && text.length > 1) results.push(text);
+                }
+                // 입력 필드의 값(가려진 이메일 등)도 추가 추출
+                document.querySelectorAll('input, label, button').forEach(el => {
+                    if (el.innerText) results.push(el.innerText.trim());
+                    if (el.value) results.push(el.value.trim());
+                });
+                return results;
+            }""")
+            page_text = " ".join(extracted_texts)
+            
+            # 브라우저 종료 전 주요 상태 확인
+            is_no_account = any(kw in page_text.lower() for kw in ["no account found", "사용자를 찾을 수 없습니다", "계정을 찾을 수 없습니다", "no users found", "account not found", "사용자 이름을 확인하고"])
+            is_captcha = "confirm it's you" in page_text.lower() or "본인 확인이 필요합니다" in page_text or "로봇이 아닙니다" in page_text or page.locator("iframe[title*='reCAPTCHA']").count() > 0 or page.locator("iframe[src*='captcha']").count() > 0
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = RegionCheckerApp(root)
-    root.mainloop()
+            browser.close()
+            
+            if is_no_account:
+                return jsonify({"status": "error", "message": "존재하지 않는 사용자명입니다.", "flag": "❓"})
+
+            if is_captcha and not visible_mode:
+                return jsonify({
+                    "status": "captcha_detected", 
+                    "message": "캡차가 감지되었습니다. 잠시 후 창이 열리면 직접 해결해주세요.", 
+                    "flag": "🤖"
+                })
+
+            number_founded = False
+            Email_founded = False
+            country_founded = False
+
+            # 추출해둔 텍스트 데이터를 기반으로 분석 시작
+            for text_data in extracted_texts:
+                # 이메일 감지
+                if "@" in text_data and ("." in text_data or "*" in text_data):
+                    Email_founded = True
+
+                # SMS 옵션 및 전송 완료 감지
+                is_SMS_option = "Get link via SMS" in text_data or "SMS로 링크 받기" in text_data
+                is_SMS_sent = any(kw in text_data for kw in ["SMS sent", "we sent an SMS", "SMS가 전송", "SMS 전송됨", "전송 완료"])
+
+                if is_SMS_option or is_SMS_sent:
+                    number_founded = True
+                    for code, (country, flag) in sorted_codes:
+                        if code in text_data:
+                            result = {"status": "success", "message": f"해당 계정은 {country} 번호로 가입되어 있습니다.", "flag": flag}
+                            country_founded = True
+                            break
+                    if country_founded: break
+            
+            # 최종 판별 로직
+            if number_founded and country_founded:
+                return jsonify(result)
+            elif number_founded and not country_founded:
+                return jsonify({"status": "warning", "message": "전화번호는 등록되어 있으나 국가 코드를 식별할 수 없습니다.", "flag": "🗺️"})
+            elif Email_founded:
+                # 이메일만 있는 경우: 국가 알 수 없음 + 가계정 경고
+                return jsonify({
+                    "status": "fake_account", 
+                    "message": "⚠️ 이메일로만 가입된 계정입니다. 국가는 식별이 불가능하며, 가짜 계정일 확률이 매우 높습니다.", 
+                    "flag": "🚫"
+                })
+            else:
+                return jsonify({"status": "error", "message": "정보를 불러오는 데 실패했습니다. 잠시 후 다시 시도해주세요.", "flag": "📱"})
+
+    except Exception as e:
+        result = {"status": "error", "message": f"오류 발생: {str(e)}", "flag": "🚨"}
+
+    return jsonify(result)
+
+def start_server():
+    app.run(host='127.0.0.1', port=5000, debug=False)
+
+if __name__ == '__main__':
+    server_thread = threading.Thread(target=start_server, daemon=True)
+    server_thread.start()
+    
+    webview.create_window(
+        title='Instagram Region Checker', 
+        url='http://127.0.0.1:5000', 
+        width=1000, 
+        height=750, 
+        resizable=False
+    )
+    
+    webview.start()

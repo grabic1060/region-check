@@ -6,4 +6,4 @@ __pycache__/
 build/
 dist/
 *.spec
-.env
+.envGEMINI.md
